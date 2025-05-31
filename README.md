@@ -100,7 +100,7 @@ Full request/response examples are in [`docs/api.md`](docs/api.md).
 
 ## License
 
-MIT © 2025 Your-Name-or-Org
+MIT © 2025 ruslanmv.com
 
 ````
 

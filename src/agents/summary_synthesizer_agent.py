@@ -2,20 +2,30 @@
 summary_synthesizer_agent.py
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Aggregates:
-• project_tree.txt   (from TreeBuilderAgent)
-• file_summaries.json (from FileAnalysisAgent)
+Aggregates two artefacts produced by earlier agents:
 
-Runs heuristic `synthesise_project()` and – optionally – an LLM ‘polish’
-step.  Stores the final text in 'project_summary.txt', emits *SummaryPolished*,
-and then – unless configured otherwise – deletes the temp dir by emitting
-*CleanupRequest* (consumed by CleanupAgent).
+  • project_tree.txt      (from TreeBuilderAgent)
+  • file_summaries.json   (from FileAnalysisAgent)
+
+Workflow
+--------
+1. Wait until both:
+      • TreeBuilt          event has arrived
+      • AnalysisComplete   event has arrived
+2. Run `synthesise_project()` (heuristic summary using README line,
+   dominant language, tech-stack inference, etc.)
+3. Optionally send the draft through an LLM “polish” pass – the back-end
+   is chosen automatically via `BEEAI_MODEL` (OpenAI, watsonx.ai, Ollama)
+   and executed by `utils.llm_router.generate_completion()`.
+4. Store the final text in BeeAI memory as 'project_summary.txt'.
+5. Emit     ProjectDraft        (raw draft)
+6. Emit     SummaryPolished     (with memory path to final text)
 
 Incoming events
 ---------------
 • TreeBuilt          { tree_path: str }
-• FileAnalysed       { … }
-• AnalysisComplete   {}
+• FileAnalysed       { … }               (one per file)
+• AnalysisComplete   {}                  (signals no more FileAnalysed)
 
 Outgoing events
 ---------------
@@ -34,14 +44,11 @@ from beeai.typing import Event
 
 from ..config import settings
 from ..utils.language_detector import synthesise_project
+from ..utils.llm_router import generate_completion  # ← new router
 
-# Optional openai / watsonx for polishing
-try:
-    import openai
-except ImportError:  # pragma: no cover
-    openai = None  # type: ignore
-
-
+# --------------------------------------------------------------------------- #
+#  Agent implementation
+# --------------------------------------------------------------------------- #
 class SummarySynthesizerAgent(beeai.Agent):
     name = "summary_synthesizer"
 
@@ -55,44 +62,57 @@ class SummarySynthesizerAgent(beeai.Agent):
     # ---------------- Event handling ----------------
     def handle(self, event: Event) -> None:  # noqa: D401
         if event["type"] == "TreeBuilt":
+            # Retrieve the tree text from BeeAI memory
             self._tree_text = self.memory.get(event["tree_path"], "")
             self._maybe_finish()
+
         elif event["type"] == "FileAnalysed":
             self._analyses.append(event)
+
         elif event["type"] == "AnalysisComplete":
             self._analysis_done = True
             self._maybe_finish()
 
-    # ---------------- helpers ----------------
+    # ---------------- Internals ----------------
     def _maybe_finish(self) -> None:
-        if self._analysis_done and self._tree_text:
-            draft = synthesise_project(self._analyses, self._tree_text)
-            self.emit("ProjectDraft", {"draft": draft})
+        """Called after every relevant event to see if we can finalise."""
+        if not (self._analysis_done and self._tree_text):
+            return  # Need both tree + analyses complete
 
-            # Optional LLM polish step
-            final = self._polish(draft) if openai else draft
+        # 1) Heuristic draft
+        draft = synthesise_project(self._analyses, self._tree_text)
+        self.emit("ProjectDraft", {"draft": draft})
 
-            # Persist & emit SummaryPolished
-            self.memory["project_summary.txt"] = final
-            self.emit("SummaryPolished", {"summary_path": "project_summary.txt"})
+        # 2) Optional polish through selected LLM back-end
+        polished = self._polish(draft)
 
+        # 3) Persist & emit final
+        self.memory["project_summary.txt"] = polished
+        self.emit("SummaryPolished", {"summary_path": "project_summary.txt"})
+
+    # --------------------------------------------------------------------- #
+    #  LLM polish step (OpenAI / watsonx.ai / Ollama, via llm_router)
+    # --------------------------------------------------------------------- #
     def _polish(self, raw: str) -> str:
+        """Try to polish *raw* using whichever LLM back-end is configured."""
         try:
-            response = openai.ChatCompletion.create(
-                model=self._model,
+            result = generate_completion(
                 messages=[
                     {
                         "role": "system",
                         "content": (
-                            "You are a copy-editor. Rewrite the summary so it "
-                            "is concise (≤150 words) and well-phrased."
+                            "You are a professional copy-editor. "
+                            "Rewrite the summary so it is clear, engaging and no "
+                            "longer than 150 words."
                         ),
                     },
                     {"role": "user", "content": raw},
                 ],
+                model_id=self._model,
                 temperature=0.3,
             )
-            polished = response.choices[0].message.content.strip()
-            return polished
-        except Exception:  # pragma: no cover
+            return result
+        except Exception as exc:  # pragma: no cover
+            # Log and fall back to the unpolished draft
+            self.logger.warning("LLM polish step failed: %s", exc)
             return raw
