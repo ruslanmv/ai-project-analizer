@@ -1,23 +1,8 @@
-# BeeAI manifest -----------------------------------------------------------
-# How to run:
-#   beeai run beeai.yaml \
-#       --event NewUpload:zip_path=/mnt/data/sample.zip
-#
-# To use a specific model, set the BEEAI_MODEL environment variable:
-#   BEEAI_MODEL="ollama/granite3.1-dense:8b" beeai run ...
-#   BEEAI_MODEL="your-watsonx-model-id" beeai run ... (may require additional config for watsonx.ai)
-#
-# The same topology is also built programmatically in src/workflows.py.
-
+# BeeAI manifest — corrected with explicit event bindings
 project: ai-project-analizer
 version: "1.0"
 
 settings:
-  # Default model is now ollama/granite3.1-dense:8b if BEEAI_MODEL is not set.
-  # For watsonx.ai, you'd typically set BEEAI_MODEL to your specific model ID.
-  # The BeeAI framework or agents might need additional configuration for watsonx.ai,
-  # such as API keys, project IDs, or specific endpoint URLs, which are not covered
-  # by this simple model string replacement.
   model: ${BEEAI_MODEL:-ollama/granite3.1-dense:8b}
   memory: sqlite:///state.db
   log_level: INFO
@@ -25,34 +10,48 @@ settings:
 agents:
   - name: zip_validator
     file: src/agents/zip_validator_agent.py
+    on_event: NewUpload
 
   - name: extractor
     file: src/agents/extraction_agent.py
     depends_on: [zip_validator]
+    on_event: ZipValid
 
   - name: tree_builder
     file: src/agents/tree_builder_agent.py
     depends_on: [extractor]
+    on_event:
+      - FileDiscovered
+      - ExtractionDone
 
   - name: file_triage
     file: src/agents/file_triage_agent.py
     depends_on: [extractor]
+    on_event:
+      - FileDiscovered
+      - ExtractionDone
 
   - name: file_analysis
     file: src/agents/file_analysis_agent.py
     depends_on: [file_triage]
+    on_event:
+      - FileForAnalysis
+      - TriageComplete
 
   - name: summary_synthesizer
     file: src/agents/summary_synthesizer_agent.py
     depends_on: [tree_builder, file_analysis]
+    on_event:
+      - TreeBuilt
+      - FileAnalysed
+      - AnalysisComplete
     parameters:
-      # This specific agent also takes a model parameter.
-      # Ensure this also reflects your desired default or is overridden by BEEAI_MODEL.
       model: ${BEEAI_MODEL:-ollama/granite3.1-dense:8b}
 
   - name: cleanup
     file: src/agents/cleanup_agent.py
     depends_on: [summary_synthesizer]
+    on_event: SummaryPolished
 
 outputs:
   - artifact: project_tree.txt

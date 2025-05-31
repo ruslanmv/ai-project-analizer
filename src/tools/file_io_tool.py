@@ -20,6 +20,7 @@ Dependencies:
 
 from __future__ import annotations
 
+import logging
 import os
 import tempfile
 import zipfile
@@ -27,6 +28,12 @@ from pathlib import Path
 from typing import List
 
 from ..config import settings
+
+# --------------------------------------------------------------------------- #
+# Configure logger for this module
+# --------------------------------------------------------------------------- #
+LOG = logging.getLogger(__name__)
+
 
 # --------------------------------------------------------------------------- #
 #  safe_extract()
@@ -50,33 +57,48 @@ def safe_extract(zip_path: Path) -> Path:
     zipfile.BadZipFile
         If the archive is corrupted or invalid.
     """
+    LOG.info("[file_io_tool] safe_extract() called with %r", zip_path)
+
     if not zipfile.is_zipfile(zip_path):
-        raise zipfile.BadZipFile(f"{zip_path!s} is not a valid ZIP archive")
+        msg = f"{zip_path!s} is not a valid ZIP archive"
+        LOG.error("[file_io_tool] %s", msg)
+        raise zipfile.BadZipFile(msg)
 
     tmp_dir = Path(tempfile.mkdtemp(prefix="ai_analyser_")).resolve()
+    LOG.info("[file_io_tool] Created temporary directory %r", tmp_dir)
 
     with zipfile.ZipFile(zip_path, "r") as zf:
         bad_member = zf.testzip()
         if bad_member:
-            raise zipfile.BadZipFile(f"CRC check failed on {bad_member}")
+            msg = f"CRC check failed on {bad_member}"
+            LOG.error("[file_io_tool] %s", msg)
+            raise zipfile.BadZipFile(msg)
 
         # Iterate through all members to enforce Zip‐Slip and size checks
         for member in zf.infolist():
+            LOG.debug("[file_io_tool] Inspecting member %r (size=%d)", member.filename, member.file_size)
+
             # 1) Check uncompressed size limit per member
             max_bytes = settings.MAX_MEMBER_SIZE_MB * 1_048_576  # MB → bytes
             if member.file_size > max_bytes:  # type: ignore[attr-defined]
-                raise ValueError(
+                msg = (
                     f"Refusing to extract '{member.filename}': "
                     f"size {member.file_size} bytes > {settings.MAX_MEMBER_SIZE_MB} MB"
                 )
+                LOG.error("[file_io_tool] %s", msg)
+                raise ValueError(msg)
 
             # 2) Construct target path and enforce Zip‐Slip defence
             target = (tmp_dir / member.filename).resolve()
             if not str(target).startswith(str(tmp_dir)):
-                raise ValueError(f"Illegal file path detected: {member.filename!r}")
+                msg = f"Illegal file path detected: {member.filename!r}"
+                LOG.error("[file_io_tool] %s", msg)
+                raise ValueError(msg)
 
+        LOG.info("[file_io_tool] All members passed size and Zip-Slip checks, extracting...")
         # All checks passed, do the actual extraction
         zf.extractall(tmp_dir)
+        LOG.info("[file_io_tool] Extraction completed into %r", tmp_dir)
 
     return tmp_dir
 
@@ -94,17 +116,29 @@ def looks_binary(path: Path, sample: int = 1024) -> bool:
     bool
         True if file is likely binary (skip content), False if likely text.
     """
+    LOG.debug("[file_io_tool] looks_binary() called for %r (sample=%d bytes)", path, sample)
     try:
         with path.open("rb") as fh:
             chunk = fh.read(sample)
             if not chunk:
+                LOG.debug("[file_io_tool] File %r is empty, treating as text", path)
                 return False  # empty file → treat as text
 
             non_printable = sum(b < 9 or 13 < b < 32 for b in chunk)
             ratio = non_printable / len(chunk)
-            return ratio > 0.30
-    except (OSError, IOError):
+            LOG.debug(
+                "[file_io_tool] File %r: non_printable=%d, total=%d, ratio=%.2f",
+                path,
+                non_printable,
+                len(chunk),
+                ratio,
+            )
+            is_binary = ratio > 0.30
+            LOG.info("[file_io_tool] looks_binary() returns %r for %r", is_binary, path)
+            return is_binary
+    except (OSError, IOError) as e:
         # On any read error, treat conservatively as binary so we skip it
+        LOG.warning("[file_io_tool] Error reading %r: %s; treating as binary", path, e)
         return True
 
 
@@ -127,6 +161,7 @@ def priority_score(path: Path) -> int:
     int
         Numerical score: higher means analyse earlier.
     """
+    LOG.debug("[file_io_tool] priority_score() called for %r", path)
     stem = path.stem.lower()
     ext = path.suffix.lower()
 
@@ -143,13 +178,17 @@ def priority_score(path: Path) -> int:
         "main",
         "app",
     }:
+        LOG.info("[file_io_tool] priority_score for %r = 100 (high-signal filename)", path)
         return 100
 
     if ext in {".py", ".js", ".json", ".yml", ".yaml", ".toml", ".sh"}:
+        LOG.info("[file_io_tool] priority_score for %r = 80 (source/config code)", path)
         return 80
 
     if ext in {".md", ".rst", ".txt"}:
+        LOG.info("[file_io_tool] priority_score for %r = 70 (documentation)", path)
         return 70
 
     # Everything else (images, binaries, etc.)
+    LOG.info("[file_io_tool] priority_score for %r = 10 (other)", path)
     return 10

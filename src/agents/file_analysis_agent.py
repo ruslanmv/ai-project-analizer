@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import ast
 import json
+import logging
 import re
 from pathlib import Path
 from typing import Any, Dict, List
@@ -35,6 +36,11 @@ except ImportError:  # pragma: no cover
     yaml = None  # type: ignore
 
 from ..utils.encoding_helper import read_text_safe  # robust UTF-8 fallback
+
+# --------------------------------------------------------------------------- #
+# Configure logger for this agent
+# --------------------------------------------------------------------------- #
+LOG = logging.getLogger(__name__)
 
 # --------------------------------------------------------------------------- #
 #  Format-specific helpers
@@ -57,35 +63,41 @@ def analyse_file(path: Path, base: Path) -> Dict[str, str]:
     rel = path.relative_to(base)
     ext = path.suffix.lower()
 
+    LOG.debug("[file_analysis] analyse_file() called for %r, base=%r", path, base)
+
     if ext in ASSET_EXTS:
+        LOG.info("[file_analysis] Skipping binary asset %r", path)
         return {"rel_path": str(rel), "kind": "asset", "summary": "(binary skipped)"}
 
     raw = read_text_safe(path)
+    LOG.debug("[file_analysis] Read %d characters from %r", len(raw), path)
 
     # -------- special parsers ----------
     if ext == ".json":
         try:
             obj = json.loads(raw)
             keys = ", ".join(list(obj)[:5])
+            LOG.info("[file_analysis] JSON parsed for %r, keys: %r", path, keys)
             return {
                 "rel_path": str(rel),
                 "kind": "json",
                 "summary": f"JSON with keys: {keys}",
             }
-        except Exception:
-            pass
+        except Exception as e:
+            LOG.warning("[file_analysis] JSON parse failed for %r: %s", path, e)
 
     if ext in {".yml", ".yaml"} and yaml:
         try:
             obj = yaml.safe_load(raw)
             keys = ", ".join(list(obj)[:5])
+            LOG.info("[file_analysis] YAML parsed for %r, keys: %r", path, keys)
             return {
                 "rel_path": str(rel),
                 "kind": "yaml",
                 "summary": f"YAML with keys: {keys}",
             }
-        except Exception:
-            pass
+        except Exception as e:
+            LOG.warning("[file_analysis] YAML parse failed for %r: %s", path, e)
 
     if ext == ".py":
         try:
@@ -97,19 +109,23 @@ def analyse_file(path: Path, base: Path) -> Dict[str, str]:
                 parts.append(f"classes={', '.join(classes[:3])}")
             if funcs:
                 parts.append(f"funcs={', '.join(funcs[:3])}")
+            summary = "; ".join(parts)
+            LOG.info("[file_analysis] Python parse for %r, summary: %r", path, summary)
             return {
                 "rel_path": str(rel),
                 "kind": "python",
-                "summary": "; ".join(parts),
+                "summary": summary,
             }
-        except SyntaxError:
-            pass
+        except SyntaxError as e:
+            LOG.warning("[file_analysis] Python syntax error for %r: %s", path, e)
 
     # fallback
+    fallback_summary = summarise_text(raw)
+    LOG.info("[file_analysis] Fallback text summary for %r: %r", path, fallback_summary)
     return {
         "rel_path": str(rel),
         "kind": "text",
-        "summary": summarise_text(raw),
+        "summary": fallback_summary,
     }
 
 
@@ -122,21 +138,45 @@ class FileAnalysisAgent(Agent):
         self._results: List[Dict[str, str]] = []
 
     def handle(self, event: Event) -> None:  # noqa: D401
-        if event["type"] == "FileForAnalysis":
-            self._analyse(Path(event["path"]))
-        elif event["type"] == "ExtractionDone":
+        LOG.info(">>> [file_analysis] handle() entered. event=%r", event)
+
+        event_type = event.get("type")
+        if event_type == "FileForAnalysis":
+            path = Path(event["path"])
+            LOG.info("[file_analysis] Received FileForAnalysis for %r", path)
+            self._analyse(path)
+        elif event_type == "ExtractionDone":
             self._base_dir = Path(event["base_dir"])
-        elif event["type"] == "TriageComplete":
+            LOG.info("[file_analysis] Received ExtractionDone, base_dir set to %r", self._base_dir)
+        elif event_type == "TriageComplete":
+            LOG.info("[file_analysis] Received TriageComplete, finalising analysis")
             self._finalise()
+        else:
+            LOG.debug("[file_analysis] Ignoring event type %r", event_type)
 
     # ---------------- helpers ---------------
     def _analyse(self, path: Path) -> None:
         base = self._base_dir or path.parents[1]  # best guess
+        LOG.debug("[file_analysis] _analyse() called with path=%r, base=%r", path, base)
+
         result = analyse_file(path, base)
+        LOG.info("[file_analysis] Analysis result for %r: %r", path, result)
+
         self._results.append(result)
+        LOG.debug("[file_analysis] Appended result, total results count=%d", len(self._results))
+
         self.emit("FileAnalysed", result)
+        LOG.info("[file_analysis] Emitted FileAnalysed for %r", path)
 
     def _finalise(self) -> None:
-        # Persist the cumulative JSON array to memory
-        self.memory["file_summaries.json"] = json.dumps(self._results, indent=2)
-        self.emit("AnalysisComplete", {})
+        LOG.info("[file_analysis] _finalise() called, total files analysed=%d", len(self._results))
+        try:
+            # Persist the cumulative JSON array to memory
+            payload = json.dumps(self._results, indent=2)
+            self.memory["file_summaries.json"] = payload
+            LOG.info("[file_analysis] Stored 'file_summaries.json' in memory (%d bytes)", len(payload))
+
+            self.emit("AnalysisComplete", {})
+            LOG.info("[file_analysis] Emitted AnalysisComplete")
+        except Exception as e:
+            LOG.exception("[file_analysis] Error while finalising and storing summaries: %s", e)

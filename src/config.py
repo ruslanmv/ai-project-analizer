@@ -11,6 +11,7 @@ overridden via:
 
 from __future__ import annotations
 
+import logging
 import os
 from functools import lru_cache
 from pathlib import Path
@@ -26,6 +27,11 @@ except ImportError:  # pragma: no cover
 
     def Field(default, **kw):  # type: ignore
         return default
+
+# --------------------------------------------------------------------------- #
+# Configure logger for this module
+# --------------------------------------------------------------------------- #
+LOG = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -59,11 +65,31 @@ class Settings(BaseSettings):
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     """Return memoised singleton settings object."""
-    # Allow test-suites to inject `AI_ANALYSER_ENV_FILE=/path/to/.env.test`
     env_override = os.getenv("AI_ANALYSER_ENV_FILE")
     if env_override and Path(env_override).exists():
-        return Settings(_env_file=env_override)
-    return Settings()
+        LOG.info(
+            "[config] Loading settings from overridden .env file: %r", env_override
+        )
+        settings_obj = Settings(_env_file=env_override)
+    else:
+        LOG.info("[config] Loading settings from default environment or .env")
+        settings_obj = Settings()
+
+    # Log all loaded settings
+    try:
+        # Attempt to pretty-print the settings as a dict
+        loaded = settings_obj.dict()
+    except Exception:
+        # Fallback: manually access attributes
+        loaded = {
+            "BEEAI_MODEL": settings_obj.BEEAI_MODEL,
+            "DELETE_TEMP_AFTER_RUN": settings_obj.DELETE_TEMP_AFTER_RUN,
+            "ZIP_SIZE_LIMIT_MB": settings_obj.ZIP_SIZE_LIMIT_MB,
+            "MAX_MEMBER_SIZE_MB": settings_obj.MAX_MEMBER_SIZE_MB,
+            "LOG_LEVEL": settings_obj.LOG_LEVEL,
+        }
+    LOG.debug("[config] Final settings: %r", loaded)
+    return settings_obj
 
 
 # Public, convenient alias
