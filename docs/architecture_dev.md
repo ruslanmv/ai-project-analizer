@@ -88,7 +88,40 @@ static/    (style.css, app.js)
 templates/ (upload.html, result.html)
 docs/      (architecture.md, api.md)
 ```
+```mermaid
+flowchart TD
+    U[User uploads ZIP & prompt] --> Plan[PlanningAgent<br/>watsonx.ai – drafts static BeeAI DAG]
 
+    Plan --> PF1[[Policy Filter]]
+    PF1 --> Py1[ExecutorAgent<br/>snippet #1 --> <br/>is_valid_zip]
+    Py1 --> V{ZIP OK?}
+    V -- no --> Err[ZipInvalid<br/>graceful JSON error] --> Z[Done]
+    V -- yes --> Extract[ExtractionAgent<br/>“extract next”]
+
+    Extract --> PF2[[Policy Filter]]
+    PF2 --> Py2[ExecutorAgent<br/>snippet #2 --> safe_extract]
+    Py2 --> FileEvents[/FileDiscovered* events/]
+
+    FileEvents --> TreeBuilder[TreeBuilderAgent]
+    TreeBuilder --> Out2[Tree text<br/>+ file list]
+    Out2 --> L3[Context tokens<br/>BeeAI memory]
+
+    L3 --> Pick[[FileTriageAgent<br/>selects next path]]
+    Pick --> PFloop[[Policy Filter]]
+    PFloop --> PyN[ExecutorAgent<br/>snippet #N --> summarise_path]
+    PyN --> OutN[/FileAnalysed event/] --> L3
+
+    L3 --> Synth[SummarySynthesizerAgent<br/>watsonx.ai draft]
+    Synth --> PolishStep[[Policy Filter]]
+    PolishStep --> Polish[ExecutorAgent<br/>snippet --> polish text]
+    Polish --> SummaryPolished[/SummaryPolished event/]
+
+    SummaryPolished --> PFclean[[Policy Filter]]
+    PFclean --> Clean[ExecutorAgent<br/>snippet --> shutil.rmtree tmp]
+    Clean --> CleanupDone[/CleanupDone event/]
+
+    CleanupDone --> Z[Deliverables:<br/>• directory tree<br/>• per-file blurbs<br/>• polished summary]
+````
 ---
 
 ## 4  Extending the pipeline
