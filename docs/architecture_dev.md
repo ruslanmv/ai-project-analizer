@@ -122,6 +122,20 @@ flowchart TD
 
     CleanupDone --> Z[Deliverables:<br/>• directory tree<br/>• per-file blurbs<br/>• polished summary]
 ````
+
+All five “Policy Filter” boxes in your architecture diagram are realized as inline conditional checks (using if statements) inside the existing agents:
+
+PF1 in zip_validator_agent.py
+
+PF2 in safe_extract() (called by extraction_agent.py)
+
+PFloop in file_triage_agent.py
+
+PolishStep in summary_synthesizer_agent.py (via generate_completion())
+
+PFclean in extraction_agent.on_shutdown() (checking DELETE_TEMP_AFTER_RUN)
+
+There is no separate “PolicyAgent” class or file. Instead, each agent contains its own local policy code. This approach keeps the workflow simple and avoids proliferating tiny “filter” agents—each policy is enforced right where it matters.
 ---
 
 ## 4  Extending the pipeline
