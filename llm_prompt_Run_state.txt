@@ -1,0 +1,125 @@
+## LLM Debugging Assistant Prompt
+
+
+**Context:** I'm working with the Python library `beeai_framework` and specifically using the class `Run` from the module `beeai_framework.context`.
+
+**Error Encountered:** I'm getting the following error message:
+```
+error:'Run' object (type: <class 'beeai_framework.context.Run'>, class confirmed as beeai_framework.context.Run) did not yield a dictionary-like object from the tried attributes/callable results: ['state', 'outputs', 'result', 'data', 'value', 'context', 'payload', 'state_data', 'memory', 'final_state'].
+```
+
+This indicates that an instance of the `Run` object does not have an attribute or method named `state` as expected.
+
+
+**Goal:** Please help me understand how to correctly achieve the intended functionality (related to 'state') with the `Run` object, based on its actual API.
+
+Below is a detailed inspection of the class. I'm looking for alternatives to access/manage something like 'state', or how the framework might handle this concept differently.
+
+
+### Inspection of `beeai_framework.context.Run`
+
+
+**Python Version:** 3.12.10
+
+
+**Package (`beeai_framework`) Version:** 0.1.14
+
+
+#### 1. Constructor (`__init__`)
+
+    Method Signature: __init__(self, handler: Callable, context: RunContext) -> None
+      Parameters:
+          - self
+          - handler: Callable
+          - context: RunContext
+      Returns: None
+
+    Docstring: 
+        """Initialize self.  See help(type(self)) for accurate signature."""
+
+
+#### 2. Class Methods (Potential Factories)
+
+  No distinct class methods found.
+
+
+#### 3. Public Instance Methods
+
+  - `__init__`:
+    Method Signature: __init__(self, handler: Callable, context: RunContext) -> None
+      Parameters:
+          - self
+          - handler: Callable
+          - context: RunContext
+      Returns: None
+    Docstring: 
+        """Initialize self.  See help(type(self)) for accurate signature."""
+
+  - `context`:
+    Method Signature: context(self, context: dict) -> Self
+      Parameters:
+          - self
+          - context: dict
+      Returns: Self
+    Docstring: Not available.
+
+  - `middleware`:
+    Method Signature: middleware(self, fn: Callable) -> Self
+      Parameters:
+          - self
+          - fn: Callable
+      Returns: Self
+    Docstring: Not available.
+
+  - `observe`:
+    Method Signature: observe(self, fn: Callable) -> Self
+      Parameters:
+          - self
+          - fn: Callable
+      Returns: Self
+    Docstring: Not available.
+
+  - `on`:
+    Method Signature: on(self, matcher: str | re.Pattern[str] | Callable[['EventMeta'], bool], callback: Callable[[Any, ForwardRef('EventMeta')], NoneType] | Callable[[Any, ForwardRef('EventMeta')], collections.abc.Awaitable[NoneType]], options: beeai_framework.emitter.types.EmitterOptions | None = None) -> Self
+      Parameters:
+          - self
+          - matcher: str | re.Pattern[str] | Callable[['EventMeta'], bool]
+          - callback: Callable[[Any, ForwardRef('EventMeta')], NoneType] | Callable[[Any, ForwardRef('EventMeta')], collections.abc.Awaitable[NoneType]]
+          - options: beeai_framework.emitter.types.EmitterOptions | None = None
+      Returns: Self
+    Docstring: Not available.
+
+
+#### 4. Public Attributes & Properties (Non-callable members or @property)
+
+  No distinct public attributes or properties found directly on the class definition.
+
+  (Instance attributes are typically defined in `__init__` and accessed via `self` on an instance).
+
+
+#### 5. Summary of Potentially Relevant Members for 'state' (based on keywords: memory, state, context, data, store, storage, variable, get, set, retrieve, access, attributes, properties, result, output, artifact, artefact, payload, shared)
+
+  - Potentially relevant methods: `context`
+
+  Please review their definitions above.
+
+
+  Key lifecycle methods (like `run`, `execute`, `process`) which might return objects containing state/memory: `__init__`
+
+
+### Questions for the LLM based on the above inspection:
+
+1. Given the error `'Run' object has no attribute 'state'`, and the available methods/attributes of `Run`, what is the idiomatic way in this framework to access or manage the data/state that `.state` was likely intended to access?
+
+2. Are there any methods (e.g., like `run()`, `get_state()`, `get_context()`, `get_data()`, `get_output()`, `get_artefacts()`) that return an object which would then contain the desired 'state' or equivalent data? If so, what is the type of the returned object and how might it be used?
+
+3. Could the concept of 'state' be something that is passed as an argument to methods (like `run()`, or a specific processing method) rather than being an attribute of the `Run` instance itself?
+
+4. If there are properties or methods that seem related (e.g., those listed in 'Potentially Relevant Members'), how should they be used to achieve the goal related to workflow memory/state/results?
+
+5. Considering the overall API, what is the likely design pattern for `Run` regarding state management, memory, or result retrieval? (e.g., does it use a state object passed around, are results returned from a main execution method, etc.)
+
+6. If the `state` attribute was available in a previous version of the library, what are the common migration paths or alternative approaches in this newer version of the API (if known or inferable)?
+
+
+Thank you for your help!

@@ -21,12 +21,12 @@ sdist/
 var/
 *.egg-info/
 .installed.cfg
-
+* copy*
 # Virtual environments
 .venv/
 venv/
 env/
-
+check*
 # PyInstaller (if used)
 *.spec
 
