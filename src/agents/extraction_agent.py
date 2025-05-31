@@ -25,8 +25,9 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict, List
 
-import beeai
-from beeai.typing import Event
+# Updated imports to use beeai_framework instead of beeai
+from beeai_framework.agent import Agent
+from beeai_framework.typing import Event
 
 from ..config import settings
 
@@ -63,7 +64,7 @@ def safe_extract(zip_path: Path) -> Path:
     return tmp_dir
 
 
-class ExtractionAgent(beeai.Agent):
+class ExtractionAgent(Agent):
     name = "extraction"
 
     def __init__(self) -> None:  # noqa: D401

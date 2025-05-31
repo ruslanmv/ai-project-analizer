@@ -132,3 +132,14 @@ async def job_result(job_id: str):
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+if __name__ == "__main__":
+    import os
+    import uvicorn
+
+    # Read host and port from environment (fallback to defaults)
+    host = os.getenv("APP_HOST", "0.0.0.0")
+    port = int(os.getenv("APP_PORT", "8000"))
+
+    uvicorn.run("app:app", host=host, port=port, log_level="info")

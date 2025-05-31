@@ -25,8 +25,9 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List
 
-import beeai
-from beeai.typing import Event
+# Updated imports to use beeai_framework instead of beeai
+from beeai_framework.agent import Agent
+from beeai_framework.typing import Event
 
 try:
     import yaml
@@ -112,7 +113,7 @@ def analyse_file(path: Path, base: Path) -> Dict[str, str]:
     }
 
 
-class FileAnalysisAgent(beeai.Agent):
+class FileAnalysisAgent(Agent):
     name = "file_analysis"
 
     def __init__(self) -> None:  # noqa: D401

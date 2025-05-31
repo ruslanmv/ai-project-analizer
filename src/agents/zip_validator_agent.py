@@ -22,13 +22,14 @@ import zipfile
 from pathlib import Path
 from typing import Any, Dict
 
-import beeai
-from beeai.typing import Event
+# Updated imports to use beeai_framework instead of beeai
+from beeai_framework.agent import Agent
+from beeai_framework.typing import Event
 
 from ..config import settings
 
 
-class ZipValidatorAgent(beeai.Agent):
+class ZipValidatorAgent(Agent):
     name = "zip_validator"
 
     def handle(self, event: Event) -> None:  # noqa: D401

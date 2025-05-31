@@ -1,10 +1,13 @@
 """
-tree_builder_agent.py
-~~~~~~~~~~~~~~~~~~~~~
+file_triage_agent.py
+~~~~~~~~~~~~~~~~~~~~
 
-Accumulates every *FileDiscovered* event, then – once *ExtractionDone*
-arrives – builds a Rich directory tree and stores it in BeeAI memory as
-'project_tree.txt'.  Finally emits *TreeBuilt*.
+Assigns a priority score to each discovered file and decides if it should be
+analysed (text/code) or skipped (binary/asset). Emits:
+
+  • FileForAnalysis  { path: str, score: int }
+  • FileSkipped      { path: str, reason: str }
+  • TriageComplete   {}
 
 Incoming events
 ---------------
@@ -13,89 +16,56 @@ Incoming events
 
 Outgoing events
 ---------------
-• TreeBuilt          { tree_path: str }
+• FileForAnalysis    { path: str, score: int }
+• FileSkipped        { path: str, reason: str }
+• TriageComplete     {}
 """
 
 from __future__ import annotations
 
-from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List
+from typing import List, Tuple
 
-import beeai
-from beeai.typing import Event
+# Updated imports to use beeai_framework instead of beeai
+from beeai_framework.agent import Agent
+from beeai_framework.typing import Event
 
-try:
-    from rich.tree import Tree
-    from rich.console import Console
-except ImportError:  # pragma: no cover
-    Tree = None  # type: ignore
-    Console = None  # type: ignore
+from ..tools.file_io_tool import looks_binary, priority_score, ASSET_SKIP_EXTS
 
 
-class TreeBuilderAgent(beeai.Agent):
-    name = "tree_builder"
+class FileTriageAgent(Agent):
+    name = "file_triage"
 
-    def __init__(self) -> None:  # noqa: D401
+    def __init__(self) -> None:
         super().__init__()
-        self._paths: List[Path] = []
-        self._base_dir: Path | None = None
+        self._queue: List[Tuple[int, Path]] = []
+        self._extraction_done: bool = False
 
-    # ---------------- Event handling ----------------
-    def handle(self, event: Event) -> None:  # noqa: D401
+    def handle(self, event: Event) -> None:
         if event["type"] == "FileDiscovered":
-            self._paths.append(Path(event["path"]))
+            self._handle_file(Path(event["path"]))
         elif event["type"] == "ExtractionDone":
-            self._base_dir = Path(event["base_dir"])
-            self._build_and_emit_tree()
+            self._extraction_done = True
+            self._flush_queue()
 
-    # ---------------- Helpers ----------------
-    def _build_and_emit_tree(self) -> None:
-        if not self._base_dir:  # pragma: no cover
+    def _handle_file(self, path: Path) -> None:
+        # PFloop: skip binary or known asset extensions
+        if looks_binary(path) or path.suffix.lower() in ASSET_SKIP_EXTS:
+            self.emit("FileSkipped", {"path": str(path), "reason": "binary/asset"})
             return
 
-        # Build a rich.Tree or fall back to plain text
-        if Tree and Console:
-            console = Console(record=True, width=120)
-            tree = Tree(f"[bold magenta]{self._base_dir.name}/")
-            self._add_branches(tree, self._paths)
-            console.print(tree)
-            tree_text: str = console.export_text()
-        else:  # Simple fallback
-            tree_text = self._fallback_ascii_tree()
+        # Not skipped: compute priority score
+        score = priority_score(path)
+        self._queue.append((score, path))
 
-        # Persist in memory and as artifact
-        self.memory["project_tree.txt"] = tree_text
-        self.emit("TreeBuilt", {"tree_path": "project_tree.txt"})
-
-    # -------------- Internal recursive builders --------------
-    @staticmethod
-    def _add_branches(tree: "Tree", paths: List[Path]) -> None:  # type: ignore
-        paths_sorted = sorted(paths, key=lambda p: (p.is_file(), p.parts))
-        for p in paths_sorted:
-            rel = p.relative_to(paths_sorted[0].parents[len(p.parts)])
-            branch = tree
-            for part in rel.parts[:-1]:
-                # Walk existing children or create new
-                next_child = None
-                for child in branch.children:
-                    if child.label.plain == f"{part}/":
-                        next_child = child
-                        break
-                if next_child is None:
-                    next_child = branch.add(f"{part}/")
-                branch = next_child
-            # finally add leaf
-            branch.add(rel.parts[-1])
-
-    def _fallback_ascii_tree(self) -> str:
-        lines: Dict[Path, List[str]] = defaultdict(list)
-        base = self._base_dir or Path("/tmp")
-        for p in sorted(self._paths):
-            rel = p.relative_to(base)
-            indent = "  " * (len(rel.parts) - 1)
-            lines[rel.parent].append(f"{indent}{rel.name}")
-        out = [f"{base.name}/"]
-        for parts in lines.values():
-            out.extend(parts)
-        return "\n".join(out)
+    def _flush_queue(self) -> None:
+        # Sort descending by score and emit FileForAnalysis
+        for _, path in sorted(self._queue, key=lambda t: -t[0]):
+            self.emit(
+                "FileForAnalysis",
+                {
+                    "path": str(path),
+                    "score": priority_score(path),
+                },
+            )
+        self.emit("TriageComplete", {})

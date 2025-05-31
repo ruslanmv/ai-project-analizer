@@ -22,8 +22,9 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List
 
-import beeai
-from beeai.typing import Event
+# Updated imports to use beeai_framework instead of beeai
+from beeai_framework.agent import Agent
+from beeai_framework.typing import Event
 
 try:
     from rich.tree import Tree
@@ -33,7 +34,7 @@ except ImportError:  # pragma: no cover
     Console = None  # type: ignore
 
 
-class TreeBuilderAgent(beeai.Agent):
+class TreeBuilderAgent(Agent):
     name = "tree_builder"
 
     def __init__(self) -> None:  # noqa: D401
@@ -58,7 +59,7 @@ class TreeBuilderAgent(beeai.Agent):
         if Tree and Console:
             console = Console(record=True, width=120)
             tree = Tree(f"[bold magenta]{self._base_dir.name}/")
-            self._add_branches(tree, self._paths)
+            self._add_branches(tree, self._paths, self._base_dir)
             console.print(tree)
             tree_text: str = console.export_text()
         else:  # Simple fallback
@@ -70,32 +71,38 @@ class TreeBuilderAgent(beeai.Agent):
 
     # -------------- Internal recursive builders --------------
     @staticmethod
-    def _add_branches(tree: "Tree", paths: List[Path]) -> None:  # type: ignore
-        paths_sorted = sorted(paths, key=lambda p: (p.is_file(), p.parts))
-        for p in paths_sorted:
-            rel = p.relative_to(paths_sorted[0].parents[len(p.parts)])
-            branch = tree
-            for part in rel.parts[:-1]:
-                # Walk existing children or create new
-                next_child = None
-                for child in branch.children:
-                    if child.label.plain == f"{part}/":
-                        next_child = child
-                        break
-                if next_child is None:
-                    next_child = branch.add(f"{part}/")
-                branch = next_child
-            # finally add leaf
-            branch.add(rel.parts[-1])
+    def _add_branches(tree: "Tree", paths: List[Path], base_dir: Path) -> None:  # type: ignore
+        # Sort by depth then name
+        paths_sorted = sorted(paths, key=lambda p: (len(p.relative_to(base_dir).parts), p.name))
+        node_map: Dict[tuple[str, ...], Tree] = {}
+        root_key = (base_dir.name,)
+        node_map[root_key] = tree
+
+        for abs_path in paths_sorted:
+            rel = abs_path.relative_to(base_dir)
+            parent_key = root_key
+            parent_node = tree
+            for idx, part in enumerate(rel.parts):
+                current_key = parent_key + (part,)
+                if current_key not in node_map:
+                    label = f"{part}/" if idx < len(rel.parts) - 1 else part
+                    new_node = parent_node.add(label)
+                    node_map[current_key] = new_node
+                parent_node = node_map[current_key]
+                parent_key = current_key
 
     def _fallback_ascii_tree(self) -> str:
         lines: Dict[Path, List[str]] = defaultdict(list)
         base = self._base_dir or Path("/tmp")
         for p in sorted(self._paths):
-            rel = p.relative_to(base)
+            try:
+                rel = p.relative_to(base)
+            except Exception:
+                continue
             indent = "  " * (len(rel.parts) - 1)
             lines[rel.parent].append(f"{indent}{rel.name}")
-        out = [f"{base.name}/"]
+
+        out: List[str] = [f"{base.name}/"]
         for parts in lines.values():
             out.extend(parts)
         return "\n".join(out)

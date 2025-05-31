@@ -39,8 +39,9 @@ import json
 from pathlib import Path
 from typing import Dict, List
 
-import beeai
-from beeai.typing import Event
+# Updated imports to use beeai_framework instead of beeai
+from beeai_framework.agent import Agent
+from beeai_framework.typing import Event
 
 from ..config import settings
 from ..utils.language_detector import synthesise_project
@@ -49,7 +50,7 @@ from ..utils.llm_router import generate_completion  # ← new router
 # --------------------------------------------------------------------------- #
 #  Agent implementation
 # --------------------------------------------------------------------------- #
-class SummarySynthesizerAgent(beeai.Agent):
+class SummarySynthesizerAgent(Agent):
     name = "summary_synthesizer"
 
     def __init__(self, model: str | None = None) -> None:  # noqa: D401

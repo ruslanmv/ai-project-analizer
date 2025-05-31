@@ -12,3 +12,7 @@ fi
 
 # Launch the FastAPI application
 python app.py
+
+
+# Launch the FastAPI application with Uvicorn
+#uvicorn app:app --host 0.0.0.0 --port "${APP_PORT:-8000}"
