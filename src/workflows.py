@@ -5,7 +5,7 @@ Assembles all BeeAI agents into a runnable Workflow (beeai-framework ≥ 0.1.14)
 
 Fixes & improvements
 --------------------
-* Call **wf.run(state=…)** instead of the removed *initial_state* kw-arg.
+* Use `wf.run(state=…)` (since this Workflow class does not support `emit`).
 * Add a robust `_find_mapping` helper: recursively inspects attributes,
   their return values (including zero-arg callables) and items inside
   `__dict__` until the first object satisfying `hasattr(x, "get")` is found.
@@ -118,7 +118,7 @@ def _safe_call(maybe_callable: Any) -> Any:
 def _find_mapping(obj: Any, *, max_depth: int = 3) -> Mapping[str, Any] | None:
     """
     Recursively search `obj` (and selected descendants) for the first dict-like
-    object (anything with a `.get` attribute).  
+    object (anything with a `.get` attribute).
 
     Depth-first search; stops as soon as one mapping is found.
 
@@ -173,7 +173,7 @@ def _find_mapping(obj: Any, *, max_depth: int = 3) -> Mapping[str, Any] | None:
 
 def create_workflow_engine(model: str | None = None) -> Workflow:
     """
-    Load a Workflow from `beeai.yaml`.  
+    Load a Workflow from `beeai.yaml`.
     The *model* argument is only logged for completeness. beeai-framework ≥ 0.1.14
     reads model settings from env / YAML directly (including OLLAMA_URL).
     """
@@ -218,7 +218,12 @@ def run_workflow(
     # -----------------------------
     max_bytes = settings.ZIP_SIZE_LIMIT_MB * 1_048_576
     size = zip_path.stat().st_size
-    LOG.debug("ZIP file size is %d bytes; max allowed is %d bytes (%d MB)", size, max_bytes, settings.ZIP_SIZE_LIMIT_MB)
+    LOG.debug(
+        "ZIP file size is %d bytes; max allowed is %d bytes (%d MB)",
+        size,
+        max_bytes,
+        settings.ZIP_SIZE_LIMIT_MB,
+    )
     if size > max_bytes:
         error_msg = f"ZIP is {size / 1_048_576:.1f} MB – exceeds limit of {settings.ZIP_SIZE_LIMIT_MB} MB"
         LOG.error(error_msg)
@@ -226,14 +231,26 @@ def run_workflow(
     LOG.info("ZIP size check passed (%0.1f MB ≤ %d MB)", size / 1_048_576, settings.ZIP_SIZE_LIMIT_MB)
 
     # -----------------------------
-    # 2) Build workflow & initial state
+    # 2) Build workflow engine
     # -----------------------------
     wf = create_workflow_engine(model)
-    initial_state: dict[str, Any] = {"NewUpload": {"zip_path": str(zip_path.resolve())}}
-    LOG.info("Initial state for workflow prepared: %s", initial_state)
 
     # -----------------------------
-    # 3) Run the workflow
+    # 3) Prepare initial state (since emit is unavailable)
+    # -----------------------------
+    resolved_path = str(zip_path.resolve())
+    initial_state: dict[str, Any] = {"NewUpload": {"zip_path": resolved_path}}
+    LOG.info("Initial state for workflow prepared: %s", initial_state)
+
+    # If the user wants to see every event, attempt to subscribe (may be no-op)
+    if print_events:
+        try:
+            wf.subscribe("*", lambda e: LOG.info("Event fired: %s", e["type"]))
+        except AttributeError:
+            LOG.debug("Workflow.subscribe is not available; skipping event logging.")
+
+    # -----------------------------
+    # 4) Run the workflow with initial_state
     # -----------------------------
     try:
         LOG.info(">>> Invoking wf.run(state=…) …")
@@ -243,11 +260,12 @@ def run_workflow(
         LOG.exception("✖ Error while running workflow: %s", e)
         raise
 
+    # (Optional) inspect run_output for debugging
     LOG.debug("Run object returned (class=%s)", run_output.__class__.__name__)
     LOG.debug("dir(run_output) = %s", dir(run_output))
 
     # -----------------------------
-    # 4) Locate the memory / outputs mapping
+    # 5) Locate the memory / outputs mapping
     # -----------------------------
     LOG.info(">>> Looking for BeeAI memory in the Run object …")
     mem = _find_mapping(run_output)
@@ -260,31 +278,40 @@ def run_workflow(
     LOG.info("✔ Found BeeAI memory mapping: %r", type(mem))
 
     # -----------------------------
-    # 5) Extract artefacts
+    # 6) Extract artefacts
     # -----------------------------
     LOG.info(">>> Extracting 'project_tree.txt' from memory …")
     tree_text = mem.get("project_tree.txt", "")
     if tree_text:
-        LOG.debug("First 100 chars of tree_text: %r", tree_text[:100] + ("…" if len(tree_text) > 100 else ""))
+        LOG.debug(
+            "First 100 chars of tree_text: %r",
+            tree_text[:100] + ("…" if len(tree_text) > 100 else ""),
+        )
     else:
         LOG.warning("No 'project_tree.txt' found in memory.")
 
     LOG.info(">>> Extracting 'file_summaries.json' from memory …")
     summaries_json = mem.get("file_summaries.json", "[]")
     if isinstance(summaries_json, str):
-        LOG.debug("First 100 chars of summaries_json: %r", summaries_json[:100] + ("…" if len(summaries_json) > 100 else ""))
+        LOG.debug(
+            "First 100 chars of summaries_json: %r",
+            summaries_json[:100] + ("…" if len(summaries_json) > 100 else ""),
+        )
     else:
         LOG.debug("'file_summaries.json' is not a string (type=%s)", type(summaries_json))
 
     LOG.info(">>> Extracting 'project_summary.txt' from memory …")
     project_summary = mem.get("project_summary.txt", "")
     if project_summary:
-        LOG.debug("First 100 chars of project_summary: %r", project_summary[:100] + ("…" if len(project_summary) > 100 else ""))
+        LOG.debug(
+            "First 100 chars of project_summary: %r",
+            project_summary[:100] + ("…" if len(project_summary) > 100 else ""),
+        )
     else:
         LOG.warning("No 'project_summary.txt' found in memory.")
 
     # -----------------------------
-    # 6) Convert summaries to list[dict]
+    # 7) Convert summaries to list[dict]
     # -----------------------------
     file_summaries: List[Dict[str, Any]]
     try:
@@ -311,7 +338,7 @@ def run_workflow(
     LOG.info("✔ Successfully processed artefacts from workflow memory.")
 
     # -----------------------------
-    # 7) Return final dict
+    # 8) Return final dict
     # -----------------------------
     return {
         "tree_text": tree_text,
