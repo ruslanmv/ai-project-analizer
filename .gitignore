@@ -1,1 +1,78 @@
+# Byte‐compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# PyInstaller (if used)
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+coverage.xml
+pytest_cache/
+.cache/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff (if ever added)
+*.log
+
+# FastAPI auto‐reload cache
+__pycache__/
+
+# BeeAI state / SQLite memory spool
+state.db
+*.sqlite
+
+# Uploaded files
+uploads/
+
+# Editor‐specific files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# macOS / Windows system files
+.DS_Store
+Thumbs.db
+
+# node_modules (if any)
+node_modules/
+
+# Logs and debug files
+*.log
 /backup

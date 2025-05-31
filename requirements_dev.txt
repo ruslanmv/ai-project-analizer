@@ -1,0 +1,9 @@
+# requirements_dev.txt
+# --------------------
+# Development-only dependencies for linting, type-checking, and testing
+
+pytest>=7.0
+black>=22.0
+isort>=5.10
+flake8>=4.0
+mypy>=0.942

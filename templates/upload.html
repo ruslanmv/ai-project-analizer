@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>AI Project-Analyser</title>
+<link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div class="container">
+    <h1>AI Project-Analyser</h1>
+
+    <section class="wizard">
+      <div class="dropzone">Drag &amp; drop your ZIP here or click to browse</div>
+      <input id="fileInput" type="file" accept=".zip" hidden />
+
+      <button>Analyse</button>
+      <progress value="0" max="100"></progress>
+    </section>
+
+    <div id="results"></div>
+  </div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

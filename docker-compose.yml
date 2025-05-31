@@ -1,0 +1,34 @@
+version: "3.9"
+
+services:
+  analyser:
+    build: .
+    container_name: ai-project-analizer
+    environment:
+      - BEEAI_MODEL=${BEEAI_MODEL:-openai/gpt-4o-mini}
+      # if you want to hit a local Ollama instead of OpenAI, set:
+      # - BEEAI_MODEL=http://ollama:11434/v1/chat/completions
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./uploads:/data/uploads      # optional persistence
+    depends_on:
+      - ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      retries: 3
+
+  # Optional LLM side-car – comment out if you use cloud LLMs
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    volumes:
+      - ollama-models:/root/.ollama
+    # Exposes 11434 for OpenAI-compatible HTTP API
+    ports:
+      - "11434:11434"
+
+volumes:
+  ollama-models:
+    driver: local

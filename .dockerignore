@@ -1,0 +1,36 @@
+# Exclude Python cache and build artifacts from Docker image
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environment directory (if created locally)
+.venv/
+venv/
+env/
+
+# Distribution archives and egg-info
+build/
+dist/
+*.egg-info/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.swp
+*.swo
+pip-wheel-metadata/
+
+# OS‐specific files
+.DS_Store
+Thumbs.db
+
+# BeeAI state / SQLite memory spool
+state.db
+*.sqlite
+
+# Uploaded ZIP persistence (if mounted)
+uploads/
+
+# node_modules (if any JS tooling accidentally present)
+node_modules/

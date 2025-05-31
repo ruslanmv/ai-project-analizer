@@ -1,0 +1,49 @@
+# BeeAI manifest -----------------------------------------------------------
+# How to run:
+#   beeai run beeai.yaml \
+#         --event NewUpload:zip_path=/mnt/data/sample.zip
+#
+# The same topology is also built programmatically in src/workflows.py.
+
+project: ai-project-analizer
+version: "1.0"
+
+settings:
+  model: ${BEEAI_MODEL:-openai/gpt-4o-mini}
+  memory: sqlite:///state.db
+  log_level: INFO
+
+agents:
+  - name: zip_validator
+    file: src/agents/zip_validator_agent.py
+
+  - name: extractor
+    file: src/agents/extraction_agent.py
+    depends_on: [zip_validator]
+
+  - name: tree_builder
+    file: src/agents/tree_builder_agent.py
+    depends_on: [extractor]
+
+  - name: file_triage
+    file: src/agents/file_triage_agent.py
+    depends_on: [extractor]
+
+  - name: file_analysis
+    file: src/agents/file_analysis_agent.py
+    depends_on: [file_triage]
+
+  - name: summary_synthesizer
+    file: src/agents/summary_synthesizer_agent.py
+    depends_on: [tree_builder, file_analysis]
+    parameters:
+      model: ${BEEAI_MODEL:-openai/gpt-4o-mini}
+
+  - name: cleanup
+    file: src/agents/cleanup_agent.py
+    depends_on: [summary_synthesizer]
+
+outputs:
+  - artifact: project_tree.txt
+  - artifact: file_summaries.json
+  - artifact: project_summary.txt
