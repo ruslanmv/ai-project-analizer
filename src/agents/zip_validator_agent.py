@@ -1,8 +1,10 @@
+# src/agents/zip_validator_agent.py
+
 """
 zip_validator_agent.py
 ~~~~~~~~~~~~~~~~~~~~~~
 
-Stage-0 guard: make sure the uploaded archive is truly a ZIP, not corrupted,
+Stage‐0 guard: make sure the uploaded archive is truly a ZIP, not corrupted,
 and below size limits.  Emits *ZipValid* or *ZipInvalid* so the rest of the
 pipeline can continue or abort early.
 
@@ -21,10 +23,7 @@ from __future__ import annotations
 import zipfile
 import logging
 from pathlib import Path
-
-# Updated imports to use beeai_framework instead of beeai
-from beeai_framework.agent import Agent
-from beeai_framework.typing import Event
+from typing import Dict, Any
 
 from ..config import settings
 
@@ -34,10 +33,36 @@ from ..config import settings
 LOG = logging.getLogger(__name__)
 
 
+# --------------------------------------------------------------------------- #
+# Minimal Agent base‐class (no beeai_framework dependency)
+# --------------------------------------------------------------------------- #
+class Agent:
+    """
+    A minimal stand‐in for the BeeAI Agent base‐class.
+    Subclasses should call self.emit(...) when they want to emit an event.
+    """
+    def __init__(self) -> None:
+        # by default, emit does nothing. In your tests you can monkey‐patch it.
+        pass
+
+    def emit(self, event_name: str, payload: Dict[str, Any]) -> None:
+        """
+        Stub method. Subclasses call this to “emit” events.
+        In tests, you can override `emit = lambda name,payload: ...`.
+        """
+        return
+
+
 class ZipValidatorAgent(Agent):
     name = "zip_validator"
 
-    def handle(self, event: Event) -> None:  # noqa: D401
+    def handle(self, event: Dict[str, Any]) -> None:  # noqa: D401
+        """
+        event is expected to be a dict with at least {"type": str, ...}
+        If event["type"] != "NewUpload", we ignore it.
+        Otherwise, we check that event["zip_path"] points to a real, non‐corrupt ZIP
+        under size limits, and then emit either "ZipValid" or "ZipInvalid".
+        """
         LOG.info(">>> [zip_validator] handle() entered. event=%r", event)
 
         # Only process NewUpload events
@@ -74,10 +99,7 @@ class ZipValidatorAgent(Agent):
             )
             self.emit(
                 "ZipInvalid",
-                {
-                    "zip_path": str(zip_path),
-                    "reason": reason,
-                },
+                {"zip_path": str(zip_path), "reason": reason},
             )
             LOG.info("[zip_validator] Emitted ZipInvalid (size limit)")
             return
@@ -114,10 +136,7 @@ class ZipValidatorAgent(Agent):
             LOG.error("[zip_validator] %s: %s", reason, corrupt)
             self.emit(
                 "ZipInvalid",
-                {
-                    "zip_path": str(zip_path),
-                    "reason": reason,
-                },
+                {"zip_path": str(zip_path), "reason": reason},
             )
             LOG.info("[zip_validator] Emitted ZipInvalid (CRC error)")
             return

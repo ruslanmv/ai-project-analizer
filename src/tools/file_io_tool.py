@@ -1,3 +1,5 @@
+# src/tools/file_io_tool.py
+
 """
 file_io_tool.py
 
@@ -21,11 +23,10 @@ Dependencies:
 from __future__ import annotations
 
 import logging
-import os
 import tempfile
 import zipfile
 from pathlib import Path
-from typing import List
+from typing import List, Set
 
 from ..config import settings
 
@@ -33,6 +34,31 @@ from ..config import settings
 # Configure logger for this module
 # --------------------------------------------------------------------------- #
 LOG = logging.getLogger(__name__)
+
+# --------------------------------------------------------------------------- #
+# ASSET_SKIP_EXTS
+#
+# A set of common “asset” extensions that the triage agent should skip
+# without even opening the file. These are typically binary image/video/audio
+# or compressed archive formats.
+# --------------------------------------------------------------------------- #
+ASSET_SKIP_EXTS: Set[str] = {
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".bmp",
+    ".svg",
+    ".mp4",
+    ".mp3",
+    ".wav",
+    ".pdf",
+    ".zip",
+    ".tar",
+    ".gz",
+    ".mpg",
+    ".mpeg",
+}
 
 
 # --------------------------------------------------------------------------- #
@@ -76,7 +102,11 @@ def safe_extract(zip_path: Path) -> Path:
 
         # Iterate through all members to enforce Zip‐Slip and size checks
         for member in zf.infolist():
-            LOG.debug("[file_io_tool] Inspecting member %r (size=%d)", member.filename, member.file_size)
+            LOG.debug(
+                "[file_io_tool] Inspecting member %r (size=%d)",
+                member.filename,
+                member.file_size,
+            )
 
             # 1) Check uncompressed size limit per member
             max_bytes = settings.MAX_MEMBER_SIZE_MB * 1_048_576  # MB → bytes
@@ -95,7 +125,7 @@ def safe_extract(zip_path: Path) -> Path:
                 LOG.error("[file_io_tool] %s", msg)
                 raise ValueError(msg)
 
-        LOG.info("[file_io_tool] All members passed size and Zip-Slip checks, extracting...")
+        LOG.info("[file_io_tool] All members passed size and Zip‐Slip checks, extracting...")
         # All checks passed, do the actual extraction
         zf.extractall(tmp_dir)
         LOG.info("[file_io_tool] Extraction completed into %r", tmp_dir)
@@ -116,12 +146,18 @@ def looks_binary(path: Path, sample: int = 1024) -> bool:
     bool
         True if file is likely binary (skip content), False if likely text.
     """
-    LOG.debug("[file_io_tool] looks_binary() called for %r (sample=%d bytes)", path, sample)
+    LOG.debug(
+        "[file_io_tool] looks_binary() called for %r (sample=%d bytes)",
+        path,
+        sample,
+    )
     try:
         with path.open("rb") as fh:
             chunk = fh.read(sample)
             if not chunk:
-                LOG.debug("[file_io_tool] File %r is empty, treating as text", path)
+                LOG.debug(
+                    "[file_io_tool] File %r is empty, treating as text", path
+                )
                 return False  # empty file → treat as text
 
             non_printable = sum(b < 9 or 13 < b < 32 for b in chunk)
@@ -138,7 +174,9 @@ def looks_binary(path: Path, sample: int = 1024) -> bool:
             return is_binary
     except (OSError, IOError) as e:
         # On any read error, treat conservatively as binary so we skip it
-        LOG.warning("[file_io_tool] Error reading %r: %s; treating as binary", path, e)
+        LOG.warning(
+            "[file_io_tool] Error reading %r: %s; treating as binary", path, e
+        )
         return True
 
 
@@ -178,15 +216,21 @@ def priority_score(path: Path) -> int:
         "main",
         "app",
     }:
-        LOG.info("[file_io_tool] priority_score for %r = 100 (high-signal filename)", path)
+        LOG.info(
+            "[file_io_tool] priority_score for %r = 100 (high‐signal filename)", path
+        )
         return 100
 
     if ext in {".py", ".js", ".json", ".yml", ".yaml", ".toml", ".sh"}:
-        LOG.info("[file_io_tool] priority_score for %r = 80 (source/config code)", path)
+        LOG.info(
+            "[file_io_tool] priority_score for %r = 80 (source/config code)", path
+        )
         return 80
 
     if ext in {".md", ".rst", ".txt"}:
-        LOG.info("[file_io_tool] priority_score for %r = 70 (documentation)", path)
+        LOG.info(
+            "[file_io_tool] priority_score for %r = 70 (documentation)", path
+        )
         return 70
 
     # Everything else (images, binaries, etc.)

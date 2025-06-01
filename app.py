@@ -1,5 +1,5 @@
 """
-app.py  –  Minimal FastAPI wrapper around the BeeAI runtime.
+app.py  –  Minimal FastAPI wrapper around the analyser runtime.
 
 Endpoints
 ---------
@@ -67,24 +67,25 @@ LOG.info("Mounted static files and templates")
 #  Helper: background analysis coroutine
 # ---------------------------------------------------------------------------- #
 async def _analyse_job(job_id: str, zip_path: Path) -> None:
-    """Runs the BeeAI workflow; pushes progress strings to SSE queue."""
+    """
+    Runs the workflow in a background task and pushes simple status updates
+    into the SSE queue.  Since run_workflow does not support per-event callbacks
+    in this self-contained version, we only notify at start, error, and done.
+    """
     LOG.info("[_analyse_job] Started background job %r with zip_path=%r", job_id, zip_path)
     queue = event_queues[job_id]
 
-    def _on_event(e):  # beeai runtime callback
-        LOG.debug("[_analyse_job] Received agent event: %r", e)
-        queue.put_nowait(f"event:{e['type']}")
+    # Notify client that job has started
+    queue.put_nowait("event:WORKFLOW_STARTED")
 
     try:
         LOG.info("[_analyse_job] Invoking run_workflow() for job %r", job_id)
-        # NOTE: run_workflow currently does not accept an event callback, so we rely on print_events=False
-        artefacts = run_workflow(
-            zip_path,
-            print_events=False,  # we handle events manually
-        )
+        artefacts = run_workflow(zip_path)
         LOG.info("[_analyse_job] run_workflow() completed for job %r", job_id)
         jobs[job_id]["artefacts"] = artefacts
         LOG.info("[_analyse_job] Stored artefacts for job %r", job_id)
+
+        # Notify client that workflow has completed
         queue.put_nowait("event:WORKFLOW_DONE")
         LOG.debug("[_analyse_job] Emitted WORKFLOW_DONE for job %r", job_id)
     except Exception as exc:  # pragma: no cover
@@ -93,10 +94,17 @@ async def _analyse_job(job_id: str, zip_path: Path) -> None:
         jobs[job_id]["artefacts"] = {"error": str(exc)}
         LOG.info("[_analyse_job] Stored error artefact for job %r", job_id)
     finally:
-        LOG.info("[_analyse_job] Cleaning up temporary directory %r for job %r", zip_path.parent, job_id)
-        queue.put_nowait("close")
-        shutil.rmtree(zip_path.parent, ignore_errors=True)
+        # Clean up the temporary directory containing the uploaded ZIP
+        temp_dir = zip_path.parent
+        LOG.info(
+            "[_analyse_job] Cleaning up temporary directory %r for job %r", temp_dir, job_id
+        )
+        shutil.rmtree(temp_dir, ignore_errors=True)
         LOG.info("[_analyse_job] Temp directory removed for job %r", job_id)
+
+        # Close the SSE stream
+        queue.put_nowait("close")
+        LOG.info("[_analyse_job] Emitted close signal for job %r", job_id)
 
 
 # ---------------------------------------------------------------------------- #

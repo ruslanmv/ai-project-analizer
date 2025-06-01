@@ -1,6 +1,6 @@
 """
 Programmatic façade so that *other Python code* can import and run the
-analyser without shelling-out.  All heavy-lifting sits in
+analyser without shelling out.  All heavy-lifting sits in
 `workflows.run_workflow()`, which returns a dict of artefacts.
 
 Example:
@@ -33,7 +33,7 @@ def analyse_zip(zip_path: str | Path, **kwargs) -> Dict[str, Any]:  # noqa: D401
     zip_path : Union[str, Path]
         Absolute or relative path to the .zip archive.
     **kwargs  :
-        Any keyword override forwarded verbatim to `run_workflow`.
+        Other keyword overrides (currently unused).
 
     Returns
     -------
@@ -49,17 +49,9 @@ def analyse_zip(zip_path: str | Path, **kwargs) -> Dict[str, Any]:  # noqa: D401
     resolved_path = Path(zip_path)
     LOG.debug("[main] Resolved zip_path to %r", resolved_path)
 
-    # Determine model parameter
-    model = kwargs.pop("model", settings.BEEAI_MODEL)
-    LOG.info("[main] Using model=%r for analysis", model)
-
     try:
         LOG.info("[main] Invoking run_workflow() …")
-        artefacts = run_workflow(
-            zip_path=resolved_path,
-            model=model,
-            **kwargs,
-        )
+        artefacts = run_workflow(resolved_path)
         LOG.info("[main] run_workflow() completed successfully")
         LOG.debug(
             "[main] Retrieved artefacts keys: %r",
