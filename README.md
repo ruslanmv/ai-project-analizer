@@ -343,14 +343,7 @@ This means you can:
 - [Typer](https://typer.tiangolo.com/) & [Rich](https://rich.readthedocs.io/) for beautiful CLI
 - [FastAPI](https://fastapi.tiangolo.com/) for modern web framework
 - [UV](https://github.com/astral-sh/uv) for blazing-fast dependency management
-
----
-
-## ⭐ **Star History**
-
-If this project helped you, please give it a ⭐ star on GitHub!
-
-[![Star History Chart](https://api.star-history.com/svg?repos=ruslanmv/ai-project-analyzer&type=Date)](https://star-history.com/#ruslanmv/ai-project-analyzer&Date)
+tps://api.star-history.com/svg?repos=ruslanmv/ai-project-analyzer&type=Date)](https://star-history.com/#ruslanmv/ai-project-analyzer&Date)
 
 ---
 
